@@ -1,0 +1,20 @@
+{
+  "name": "kintai-kiosk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "タブレット1台で完結するアルバイト向け勤怠打刻アプリ",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "dev": "node --watch server/index.mjs",
+    "set-admin-password": "node scripts/set-admin-password.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
+  }
+}

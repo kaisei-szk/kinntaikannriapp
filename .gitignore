@@ -1,0 +1,7 @@
+node_modules/
+data/*.sqlite3
+data/*.sqlite3-*
+data/.session-secret
+.env
+*.log
+.DS_Store

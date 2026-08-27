@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>勤怠管理 - 管理画面</title>
+<link rel="stylesheet" href="admin.css" />
+<link rel="icon" href="../icon.svg" type="image/svg+xml" />
+</head>
+<body>
+
+<section id="login-view" class="view">
+  <form id="login-form" class="login-form">
+    <h1>管理画面ログイン</h1>
+    <input type="password" id="login-password" placeholder="パスワード" autocomplete="current-password" required />
+    <button type="submit" class="btn btn-primary">ログイン</button>
+    <p id="login-error" class="error-text"></p>
+  </form>
+</section>
+
+<section id="admin-view" class="view hidden">
+  <header class="admin-header">
+    <h1>勤怠管理</h1>
+    <nav class="tabs">
+      <button type="button" class="tab-btn active" data-tab="records">勤怠記録</button>
+      <button type="button" class="tab-btn" data-tab="staff">スタッフ管理</button>
+    </nav>
+    <button type="button" id="logout-btn" class="btn btn-secondary btn-small">ログアウト</button>
+  </header>
+
+  <section id="tab-records" class="tab-panel">
+    <div class="toolbar">
+      <label>期間 <input type="date" id="filter-from" /></label>
+      <label>〜 <input type="date" id="filter-to" /></label>
+      <label>スタッフ
+        <select id="filter-staff"><option value="">全員</option></select>
+      </label>
+      <button type="button" id="filter-apply" class="btn btn-secondary btn-small">検索</button>
+      <button type="button" id="record-add-btn" class="btn btn-primary btn-small">打刻を追加</button>
+    </div>
+
+    <div class="toolbar">
+      <label>CSV出力 年
+        <input type="number" id="export-year" min="2000" max="2100" style="width:5.5em" />
+      </label>
+      <label>月
+        <input type="number" id="export-month" min="1" max="12" style="width:4em" />
+      </label>
+      <label>スタッフ
+        <select id="export-staff"><option value="">全員</option></select>
+      </label>
+      <a id="export-link" class="btn btn-secondary btn-small" href="#">CSVダウンロード</a>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>日付</th><th>時刻</th><th>スタッフ</th><th>種別</th><th>備考</th><th></th></tr>
+      </thead>
+      <tbody id="records-tbody"></tbody>
+    </table>
+  </section>
+
+  <section id="tab-staff" class="tab-panel hidden">
+    <div class="toolbar">
+      <button type="button" id="staff-add-btn" class="btn btn-primary btn-small">スタッフを追加</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr><th>名前</th><th>カナ</th><th>表示順</th><th>状態</th><th></th></tr>
+      </thead>
+      <tbody id="staff-tbody"></tbody>
+    </table>
+  </section>
+</section>
+
+<dialog id="record-dialog">
+  <form id="record-form" method="dialog">
+    <h2 id="record-dialog-title">打刻を追加</h2>
+    <input type="hidden" id="record-id" />
+    <label>スタッフ
+      <select id="record-staff" required></select>
+    </label>
+    <label>種別
+      <select id="record-type" required>
+        <option value="in">出勤</option>
+        <option value="out">退勤</option>
+      </select>
+    </label>
+    <label>日時
+      <input type="datetime-local" id="record-timestamp" step="1" required />
+    </label>
+    <label>備考
+      <input type="text" id="record-note" />
+    </label>
+    <div id="record-history" class="history-box hidden"></div>
+    <div class="dialog-actions">
+      <button type="button" id="record-cancel" class="btn btn-secondary">キャンセル</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="staff-dialog">
+  <form id="staff-form" method="dialog">
+    <h2 id="staff-dialog-title">スタッフを追加</h2>
+    <input type="hidden" id="staff-id" />
+    <label>名前
+      <input type="text" id="staff-name" required />
+    </label>
+    <label>カナ(五十音順の並び替えに使用)
+      <input type="text" id="staff-kana" placeholder="ヤマダ タロウ" />
+    </label>
+    <label>表示順(小さいほど先に表示)
+      <input type="number" id="staff-order" value="0" />
+    </label>
+    <div class="dialog-actions">
+      <button type="button" id="staff-cancel" class="btn btn-secondary">キャンセル</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="admin.js"></script>
+</body>
+</html>

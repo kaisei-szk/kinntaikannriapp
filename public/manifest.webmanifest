@@ -1,0 +1,12 @@
+{
+  "name": "勤怠打刻",
+  "short_name": "勤怠打刻",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1e5aa8",
+  "theme_color": "#1e5aa8",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
