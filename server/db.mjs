@@ -47,6 +47,35 @@ db.exec(`
   );
 `);
 
+// Import the version-controlled staff roster (data/staff.seed.json).
+// Idempotent: only names that do not already exist are inserted, so restarts
+// and clones stay in sync without creating duplicates or resurrecting deleted staff.
+const seedPath = path.join(dataDir, 'staff.seed.json');
+if (fs.existsSync(seedPath)) {
+  try {
+    const roster = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+    if (Array.isArray(roster) && roster.length) {
+      const existing = new Set(db.prepare('SELECT name FROM staff').all().map((r) => r.name));
+      const insert = db.prepare(
+        `INSERT INTO staff (name, kana, display_order, active, created_at)
+         VALUES (?, ?, ?, 1, ?)`
+      );
+      const now = nowLocalString();
+      let added = 0;
+      for (const s of roster) {
+        const name = (s.name || '').trim();
+        if (!name || existing.has(name)) continue;
+        insert.run(name, (s.kana || '').trim(), Number(s.displayOrder) || 0, now);
+        existing.add(name);
+        added += 1;
+      }
+      if (added) console.log(`スタッフ名簿を ${added} 件取り込みました (staff.seed.json)`);
+    }
+  } catch (err) {
+    console.warn('staff.seed.json の読み込みに失敗しました:', err.message);
+  }
+}
+
 export function nowLocalString(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
   return (
