@@ -63,6 +63,7 @@
   <section id="tab-staff" class="tab-panel hidden">
     <div class="toolbar">
       <button type="button" id="staff-add-btn" class="btn btn-primary btn-small">スタッフを追加</button>
+      <label class="inline-check"><input type="checkbox" id="show-inactive" /> 非表示のスタッフも表示</label>
     </div>
     <table class="data-table">
       <thead>
@@ -118,6 +119,17 @@
       <button type="submit" class="btn btn-primary">保存</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="staff-summary-dialog" class="summary-dialog">
+  <div class="summary-header">
+    <h2 id="summary-title">勤務サマリー</h2>
+    <div class="summary-actions">
+      <a id="summary-csv" class="btn btn-secondary btn-small" href="#">CSV出力</a>
+      <button type="button" id="summary-close" class="btn btn-secondary btn-small">閉じる</button>
+    </div>
+  </div>
+  <div id="summary-body"></div>
 </dialog>
 
 <script src="admin.js"></script>

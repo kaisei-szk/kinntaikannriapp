@@ -30,6 +30,7 @@
 
   const staffTbody = document.getElementById('staff-tbody');
   const staffAddBtn = document.getElementById('staff-add-btn');
+  const showInactive = document.getElementById('show-inactive');
 
   const recordDialog = document.getElementById('record-dialog');
   const recordForm = document.getElementById('record-form');
@@ -50,6 +51,12 @@
   const staffKanaInput = document.getElementById('staff-kana');
   const staffOrderInput = document.getElementById('staff-order');
   const staffCancelBtn = document.getElementById('staff-cancel');
+
+  const staffSummaryDialog = document.getElementById('staff-summary-dialog');
+  const summaryTitle = document.getElementById('summary-title');
+  const summaryBody = document.getElementById('summary-body');
+  const summaryCloseBtn = document.getElementById('summary-close');
+  const summaryCsvLink = document.getElementById('summary-csv');
 
   let allStaff = [];
 
@@ -152,23 +159,33 @@
 
   function renderStaffTable() {
     staffTbody.innerHTML = '';
-    for (const s of allStaff) {
+    const list = showInactive.checked ? allStaff : allStaff.filter((s) => s.active);
+    if (list.length === 0) {
+      staffTbody.innerHTML =
+        '<tr><td colspan="5" style="text-align:center;color:#888;">表示できるスタッフがいません</td></tr>';
+      return;
+    }
+    for (const s of list) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${escapeHtml(s.name)}</td>
         <td>${escapeHtml(s.kana || '')}</td>
         <td>${s.display_order}</td>
-        <td><span class="badge ${s.active ? 'badge-active' : 'badge-inactive'}">${s.active ? '在籍' : '退職'}</span></td>
+        <td><span class="badge ${s.active ? 'badge-active' : 'badge-inactive'}">${s.active ? '表示中' : '非表示'}</span></td>
         <td class="row-actions">
+          <button type="button" class="btn btn-secondary btn-small" data-action="detail">詳細</button>
           <button type="button" class="btn btn-secondary btn-small" data-action="edit">編集</button>
-          <button type="button" class="btn ${s.active ? 'btn-danger' : 'btn-secondary'} btn-small" data-action="toggle">${s.active ? '退職にする' : '在籍に戻す'}</button>
+          <button type="button" class="btn ${s.active ? 'btn-danger' : 'btn-secondary'} btn-small" data-action="toggle">${s.active ? '削除' : '復元'}</button>
         </td>
       `;
+      tr.querySelector('[data-action="detail"]').addEventListener('click', () => openStaffSummary(s));
       tr.querySelector('[data-action="edit"]').addEventListener('click', () => openStaffDialog(s));
       tr.querySelector('[data-action="toggle"]').addEventListener('click', () => toggleStaffActive(s));
       staffTbody.appendChild(tr);
     }
   }
+
+  showInactive.addEventListener('change', renderStaffTable);
 
   function renderStaffSelects() {
     const active = allStaff.filter((s) => s.active);
@@ -184,7 +201,7 @@
 
   async function toggleStaffActive(staff) {
     if (staff.active) {
-      if (!confirm(`${staff.name} さんを退職(打刻画面に非表示)にしますか？\n過去の打刻記録は保持されます。`)) return;
+      if (!confirm(`${staff.name} さんを削除(非表示)しますか？\n打刻記録は保持され、「非表示のスタッフも表示」から復元できます。`)) return;
       await api(`/api/admin/staff/${staff.id}`, { method: 'DELETE' });
     } else {
       await api(`/api/admin/staff/${staff.id}`, {
@@ -206,6 +223,62 @@
 
   staffAddBtn.addEventListener('click', () => openStaffDialog(null));
   staffCancelBtn.addEventListener('click', () => staffDialog.close());
+  summaryCloseBtn.addEventListener('click', () => staffSummaryDialog.close());
+
+  function formatDuration(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}時間${String(m).padStart(2, '0')}分`;
+  }
+
+  async function openStaffSummary(staff) {
+    summaryTitle.textContent = `${staff.name} さんの勤務サマリー`;
+    summaryCsvLink.href = `/api/admin/staff/${staff.id}/summary.csv`;
+    summaryBody.innerHTML = '読み込み中...';
+    staffSummaryDialog.showModal();
+    try {
+      const data = await api(`/api/admin/staff/${staff.id}/summary`);
+      summaryBody.innerHTML = renderSummary(data);
+    } catch (err) {
+      summaryBody.innerHTML = `<p class="error-text">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderSummary(data) {
+    const open = data.openSession
+      ? `<p class="summary-open">未退勤: ${escapeHtml(data.openSession)} から出勤中</p>`
+      : '';
+
+    const monthly = data.monthlyTotals.length
+      ? `<table class="data-table">
+           <thead><tr><th>月</th><th>勤務回数</th><th>累計勤務時間</th></tr></thead>
+           <tbody>${data.monthlyTotals
+             .map(
+               (m) =>
+                 `<tr><td>${escapeHtml(m.month)}</td><td>${m.sessions}回</td><td>${formatDuration(
+                   m.totalMinutes
+                 )}</td></tr>`
+             )
+             .join('')}</tbody>
+         </table>`
+      : '<p class="summary-empty">勤務記録がありません</p>';
+
+    const sessions = data.sessions.length
+      ? `<table class="data-table">
+           <thead><tr><th>出勤</th><th>退勤</th><th>勤務時間</th></tr></thead>
+           <tbody>${data.sessions
+             .map(
+               (s) =>
+                 `<tr><td>${escapeHtml(s.in)}</td><td>${escapeHtml(s.out)}</td><td>${formatDuration(
+                   s.minutes
+                 )}</td></tr>`
+             )
+             .join('')}</tbody>
+         </table>`
+      : '<p class="summary-empty">確定した打刻ペアがありません</p>';
+
+    return `<h3>月別累計勤務時間</h3>${monthly}${open}<h3>打刻記録(出勤〜退勤)</h3>${sessions}`;
+  }
 
   staffForm.addEventListener('submit', async (e) => {
     e.preventDefault();

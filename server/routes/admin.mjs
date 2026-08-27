@@ -110,6 +110,116 @@ adminRouter.delete('/staff/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Compute punch sessions + monthly cumulative worked time for one staff.
+// Returns null if the staff does not exist.
+function computeStaffSummary(id) {
+  const staff = db.prepare('SELECT id, name, kana, active FROM staff WHERE id = ?').get(id);
+  if (!staff) return null;
+
+  const punches = db
+    .prepare(
+      `SELECT type, timestamp FROM punches
+       WHERE staff_id = ? ORDER BY timestamp ASC, id ASC`
+    )
+    .all(id);
+
+  // Pair each 出勤(in) with the next 退勤(out) chronologically.
+  const sessions = [];
+  let open = null;
+  for (const p of punches) {
+    if (p.type === 'in') {
+      open = p;
+    } else if (p.type === 'out' && open) {
+      const start = new Date(open.timestamp.replace(' ', 'T'));
+      const end = new Date(p.timestamp.replace(' ', 'T'));
+      const minutes = Math.round((end - start) / 60000);
+      if (minutes >= 0) {
+        sessions.push({ in: open.timestamp, out: p.timestamp, minutes });
+      }
+      open = null;
+    }
+  }
+
+  // Cumulative worked time per month, attributed to the 出勤 month.
+  const monthMap = new Map();
+  for (const s of sessions) {
+    const month = s.in.slice(0, 7); // YYYY-MM
+    const cur = monthMap.get(month) || { month, totalMinutes: 0, sessions: 0 };
+    cur.totalMinutes += s.minutes;
+    cur.sessions += 1;
+    monthMap.set(month, cur);
+  }
+  const monthlyTotals = [...monthMap.values()].sort((a, b) => b.month.localeCompare(a.month));
+
+  return {
+    staff,
+    monthlyTotals,
+    sessions: sessions.reverse(), // newest first
+    openSession: open ? open.timestamp : null,
+  };
+}
+
+function formatDurationHm(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
+adminRouter.get('/staff/:id/summary', (req, res) => {
+  const summary = computeStaffSummary(Number(req.params.id));
+  if (!summary) {
+    return res.status(404).json({ error: 'スタッフが見つかりません' });
+  }
+  res.json(summary);
+});
+
+adminRouter.get('/staff/:id/summary.csv', (req, res) => {
+  const summary = computeStaffSummary(Number(req.params.id));
+  if (!summary) {
+    return res.status(404).json({ error: 'スタッフが見つかりません' });
+  }
+
+  // Session detail (oldest first for readability), then monthly totals.
+  const detailRows = [...summary.sessions].reverse().map((s) => ({
+    month: s.in.slice(0, 7),
+    in: s.in,
+    out: s.out,
+    duration: formatDurationHm(s.minutes),
+    minutes: s.minutes,
+  }));
+
+  let csv = toCsv(detailRows, [
+    { key: 'month', label: '月' },
+    { key: 'in', label: '出勤' },
+    { key: 'out', label: '退勤' },
+    { key: 'duration', label: '勤務時間(時:分)' },
+    { key: 'minutes', label: '勤務分' },
+  ]);
+
+  const esc = (v) => {
+    const str = v === null || v === undefined ? '' : String(v);
+    return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const monthlyLines = [
+    '',
+    '月別累計',
+    '月,勤務回数,累計勤務時間(時:分),累計勤務分',
+    ...summary.monthlyTotals.map((m) =>
+      [esc(m.month), `${m.sessions}回`, formatDurationHm(m.totalMinutes), m.totalMinutes].join(',')
+    ),
+  ];
+  csv += monthlyLines.join('\r\n') + '\r\n';
+
+  const safeName = summary.staff.name.replace(/[^\p{L}\p{N}_-]/gu, '_');
+  const filename = `summary_${summary.staff.id}_${safeName}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="summary_${summary.staff.id}.csv"; filename*=UTF-8''${encodeURIComponent(filename)}`
+  );
+  res.send(csv);
+});
+
 // ---- attendance records ----
 
 adminRouter.get('/records', (req, res) => {

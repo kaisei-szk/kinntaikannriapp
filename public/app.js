@@ -24,6 +24,25 @@
 
   const TYPE_LABEL = { in: '出勤', out: '退勤' };
 
+  const AVATAR_SVG =
+    '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="12" cy="8" r="3.5"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>';
+
+  // ---- clock ----
+  const clockTime = document.getElementById('clock-time');
+  const clockDate = document.getElementById('clock-date');
+  const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+  function updateClock() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    clockTime.textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
+    clockDate.textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
   let staffList = [];
   let busy = false; // guards the whole tap -> confirm -> camera -> done flow
   let pending = null; // { id, name, type }
@@ -37,13 +56,20 @@
     }
     const frag = document.createDocumentFragment();
     for (const s of list) {
+      // 出勤〜退勤の間だけ「勤務中」を緑で強調。それ以外(未打刻/退勤後)は灰色。
+      const working = s.lastType === 'in';
+      const state = working ? 'working' : 'left';
+
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'staff-btn';
+      btn.className = `staff-btn state-${state}`;
       btn.dataset.id = String(s.id);
+      const kanaHtml = s.kana ? `<span class="staff-kana">${escapeHtml(s.kana)}</span>` : '';
       btn.innerHTML = `
+        <span class="staff-avatar">${AVATAR_SVG}</span>
         <span class="staff-name">${escapeHtml(s.name)}</span>
-        <span class="staff-status status-${s.nextType}">${TYPE_LABEL[s.nextType]}</span>
+        ${kanaHtml}
+        <span class="staff-status status-${state}">勤務中</span>
       `;
       btn.addEventListener('click', () => onStaffTap(s));
       frag.appendChild(btn);
@@ -73,11 +99,26 @@
     render(filtered);
   }
 
+  const kanaCollator = new Intl.Collator('ja', { sensitivity: 'base' });
+
+  // 出勤中(勤務中)の人を上部に優先表示し、その中では苗字(カナ)の五十音順に並べる。
+  // カナ未入力のスタッフは名前で代用する。
+  function sortByKana(list) {
+    return list.slice().sort((a, b) => {
+      const aw = a.lastType === 'in' ? 0 : 1;
+      const bw = b.lastType === 'in' ? 0 : 1;
+      if (aw !== bw) return aw - bw;
+      const ka = (a.kana || a.name || '').trim();
+      const kb = (b.kana || b.name || '').trim();
+      return kanaCollator.compare(ka, kb);
+    });
+  }
+
   async function loadStaff() {
     try {
       const res = await fetch('/api/staff');
       if (!res.ok) throw new Error('failed');
-      staffList = await res.json();
+      staffList = sortByKana(await res.json());
       applyFilter();
     } catch (err) {
       staffGrid.innerHTML = '<p class="loading">読み込みに失敗しました。しばらくして再度お試しください。</p>';
