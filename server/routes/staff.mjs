@@ -8,6 +8,11 @@ function todayPrefix() {
   return datePart; // YYYY-MM-DD
 }
 
+// GET /api/health - キオスク端末の常駐画面がサーバーの生死を確認するための軽量エンドポイント。
+staffRouter.get('/health', (req, res) => {
+  res.json({ ok: true, time: nowLocalString() });
+});
+
 // GET /api/staff - active staff list with today's punch status, for the kiosk screen.
 staffRouter.get('/staff', (req, res) => {
   const staff = db

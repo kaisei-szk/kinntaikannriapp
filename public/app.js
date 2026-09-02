@@ -41,10 +41,11 @@
     clockDate.textContent = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`;
   }
   updateClock();
-  setInterval(updateClock, 1000);
+  setInterval(tick, 1000);
 
   let staffList = [];
   let busy = false; // guards the whole tap -> confirm -> camera -> done flow
+  let busySince = 0; // busy になった時刻。ハングした操作を自動復旧するための目印
   let pending = null; // { id, name, type }
   let mediaStream = null;
 
@@ -116,12 +117,18 @@
 
   async function loadStaff() {
     try {
-      const res = await fetch('/api/staff');
+      const res = await fetch('/api/staff', { cache: 'no-store' });
       if (!res.ok) throw new Error('failed');
       staffList = sortByKana(await res.json());
       applyFilter();
+      setOnline(true);
+      return true;
     } catch (err) {
-      staffGrid.innerHTML = '<p class="loading">読み込みに失敗しました。しばらくして再度お試しください。</p>';
+      setOnline(false);
+      if (staffList.length === 0) {
+        staffGrid.innerHTML = '<p class="loading">サーバーに接続できません。自動で再接続しています...</p>';
+      }
+      return false;
     }
   }
 
@@ -130,6 +137,7 @@
   function onStaffTap(staff) {
     if (busy) return;
     busy = true;
+    busySince = Date.now();
     pending = { id: staff.id, name: staff.name, type: staff.nextType };
     openConfirm();
   }
@@ -152,7 +160,7 @@
   confirmCancel.addEventListener('click', () => {
     closeConfirm();
     pending = null;
-    busy = false;
+    setIdle();
   });
 
   confirmOk.addEventListener('click', async () => {
@@ -166,10 +174,12 @@
     cameraFlash.classList.remove('flash-active');
 
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
-        audio: false,
-      });
+      // 端末が長時間つけっぱなしだとカメラ取得が返ってこないことがあるため、
+      // 4秒で見切りをつけて打刻処理へ進む(写真は演出のみで保存しない)。
+      mediaStream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }),
+        wait(4000).then(() => { throw new Error('camera timeout'); }),
+      ]);
       cameraVideo.srcObject = mediaStream;
       await cameraVideo.play().catch(() => {});
       await wait(1400);
@@ -231,10 +241,120 @@
 
     setTimeout(async () => {
       screenDone.classList.add('hidden');
-      busy = false;
+      setIdle();
       await loadStaff();
     }, 3000);
   }
+
+  // ---- キオスク運用の安定化 ----
+  // タブレットを置きっぱなしで使うため、(1)画面を消させない (2)固まったら自力で復帰する
+  // の2点をアプリ側でも面倒を見る。OS側の設定(常時点灯・アプリ固定)と併用する前提。
+
+  const connBanner = document.getElementById('conn-banner');
+
+  // 画面スリープ抑止。Wake Lock は画面が隠れると解除されるので都度取り直す。
+  let wakeLock = null;
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock || document.visibilityState !== 'visible') return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    } catch (err) {
+      wakeLock = null; // 非対応ブラウザ・省電力モードなど。OS設定側で担保する。
+    }
+  }
+
+  // 操作フローが途中で固まったとき用のリセット。
+  function setIdle() {
+    busy = false;
+    busySince = 0;
+  }
+
+  function resetFlow() {
+    stopCamera();
+    screenConfirm.classList.add('hidden');
+    screenCamera.classList.add('hidden');
+    screenDone.classList.add('hidden');
+    pending = null;
+    setIdle();
+  }
+
+  // ---- 接続監視 ----
+  const OFFLINE_RELOAD_MS = 3 * 60_000; // これ以上落ちていたら復帰時に画面ごと作り直す
+  let offlineSince = 0;
+
+  function setOnline(ok) {
+    if (ok) {
+      const downMs = offlineSince ? Date.now() - offlineSince : 0;
+      offlineSince = 0;
+      connBanner.classList.add('hidden');
+      // サーバー再起動をまたいだ場合は表示が古い可能性が高いので読み直す。
+      if (downMs > OFFLINE_RELOAD_MS && !busy) location.reload();
+      return;
+    }
+    if (!offlineSince) offlineSince = Date.now();
+    connBanner.textContent = 'サーバーに接続できません。自動で再接続しています…';
+    connBanner.classList.remove('hidden');
+  }
+
+  async function healthLoop() {
+    for (;;) {
+      let ok = false;
+      try {
+        // 応答が返ってくること自体が「サーバーが生きている」証拠。
+        // /api/health を持たない旧バージョンが動いていても誤検知しないよう 4xx も生存扱いにする。
+        const res = await fetch('/api/health', { cache: 'no-store' });
+        ok = res.status < 500;
+      } catch (err) {
+        ok = false; // 接続そのものが失敗 = サーバーが落ちている
+      }
+      setOnline(ok);
+      await wait(ok ? 20_000 : 3_000); // 落ちている間は短い間隔で復帰を待つ
+    }
+  }
+
+  // ---- ウォッチドッグ ----
+  // 1秒ごとに呼ばれる想定。時計の進みが飛んでいたら端末スリープ/タブ凍結からの復帰とみなす。
+  const FREEZE_MS = 60_000;
+  const BUSY_TIMEOUT_MS = 120_000;
+  let lastTick = Date.now();
+
+  function tick() {
+    updateClock();
+    const now = Date.now();
+    const gap = now - lastTick;
+    lastTick = now;
+
+    if (gap > FREEZE_MS) {
+      // 停止していた間に日付や勤務状態が変わっている。作り直すのが一番確実。
+      if (!busy) {
+        location.reload();
+        return;
+      }
+      resetFlow();
+      loadStaff();
+    }
+
+    // 打刻フローが固まったまま放置されると誰も打刻できなくなるので強制解除する。
+    if (busy && busySince && now - busySince > BUSY_TIMEOUT_MS) {
+      resetFlow();
+      loadStaff();
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    acquireWakeLock();
+    loadStaff();
+  });
+  // 自動取得が弾かれた場合に備え、タッチのたびに取り直しを試みる。
+  document.addEventListener('pointerdown', acquireWakeLock, { passive: true });
+  window.addEventListener('online', () => loadStaff());
+
+  acquireWakeLock();
+  healthLoop();
 
   loadStaff();
   setInterval(loadStaff, 60_000);

@@ -46,6 +46,11 @@ html, body {
   letter-spacing: 0.02em;
 }
 
+.conn-banner.hidden { display: none; }
+
+/* 帯が出ている間は本文を押し下げ、時計が隠れないようにする */
+.conn-banner:not(.hidden) ~ .screen { padding-top: 44px; }
+
 .clock-date {
   margin: 0;
   font-size: 1.15rem;
@@ -158,6 +163,11 @@ html, body {
   color: #98a1b2;
   letter-spacing: 0.02em;
 }
+
+.conn-banner.hidden { display: none; }
+
+/* 帯が出ている間は本文を押し下げ、時計が隠れないようにする */
+.conn-banner:not(.hidden) ~ .screen { padding-top: 44px; }
 
 .staff-status {
   margin-top: auto;
@@ -391,3 +401,24 @@ html, body {
   .staff-btn { min-height: 168px; padding: 22px 14px 20px; }
   .staff-name { font-size: 1.6rem; }
 }
+
+/* 接続断のときだけ最上部に出る帯。打刻操作は邪魔しない。 */
+.conn-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 10px 16px;
+  background: #b3261e;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.conn-banner.hidden { display: none; }
+
+/* 帯が出ている間は本文を押し下げ、時計が隠れないようにする */
+.conn-banner:not(.hidden) ~ .screen { padding-top: 44px; }
