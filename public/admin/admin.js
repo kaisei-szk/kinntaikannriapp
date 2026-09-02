@@ -23,10 +23,15 @@
   const recordsTbody = document.getElementById('records-tbody');
   const recordAddBtn = document.getElementById('record-add-btn');
 
-  const exportYear = document.getElementById('export-year');
-  const exportMonth = document.getElementById('export-month');
+  const exportYearLabel = document.getElementById('export-year-label');
+  const exportYearPrev = document.getElementById('year-prev');
+  const exportYearNext = document.getElementById('year-next');
+  const exportMonthGrid = document.getElementById('month-grid');
+  const exportTarget = document.getElementById('export-target');
   const exportStaff = document.getElementById('export-staff');
+  const exportWage = document.getElementById('export-wage');
   const exportLink = document.getElementById('export-link');
+  const exportXlsxLink = document.getElementById('export-xlsx-link');
 
   const staffTbody = document.getElementById('staff-tbody');
   const staffAddBtn = document.getElementById('staff-add-btn');
@@ -113,9 +118,9 @@
     await refreshStaff();
     await refreshRecords();
     const now = new Date();
-    exportYear.value = now.getFullYear();
-    exportMonth.value = now.getMonth() + 1;
-    updateExportLink();
+    exportState.year = now.getFullYear();
+    exportState.month = now.getMonth() + 1;
+    renderExportPicker();
   }
 
   loginForm.addEventListener('submit', async (e) => {
@@ -423,16 +428,73 @@
 
   // ---- csv export ----
 
+  // 出力対象の年月。タブレットで扱いやすいよう入力欄ではなくボタンで選ぶ。
+  const exportState = { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
+
+  function isFutureMonth(year, month) {
+    const now = new Date();
+    return year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth() + 1);
+  }
+
+  function renderExportPicker() {
+    exportYearLabel.textContent = `${exportState.year}年`;
+    // 未来の年月にはデータが無いので選べないようにする。
+    exportYearNext.disabled = exportState.year >= new Date().getFullYear();
+
+    exportMonthGrid.innerHTML = '';
+    for (let m = 1; m <= 12; m += 1) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'month-btn';
+      btn.textContent = `${m}月`;
+      btn.dataset.month = String(m);
+      if (m === exportState.month) btn.classList.add('selected');
+      if (isFutureMonth(exportState.year, m)) btn.disabled = true;
+      btn.addEventListener('click', () => {
+        exportState.month = m;
+        renderExportPicker();
+      });
+      exportMonthGrid.appendChild(btn);
+    }
+
+    updateExportLink();
+  }
+
   function updateExportLink() {
     const params = new URLSearchParams({
-      year: exportYear.value,
-      month: exportMonth.value,
+      year: String(exportState.year),
+      month: String(exportState.month),
     });
     if (exportStaff.value) params.set('staffId', exportStaff.value);
     exportLink.href = `/api/admin/export.csv?${params.toString()}`;
+
+    // Excel は時給も渡す(給与シートの計算に使う)。
+    const xlsxParams = new URLSearchParams(params);
+    const wage = Number(exportWage.value);
+    if (Number.isFinite(wage) && wage >= 0) xlsxParams.set('wage', String(wage));
+    exportXlsxLink.href = `/api/admin/export.xlsx?${xlsxParams.toString()}`;
+
+    const staffLabel = exportStaff.selectedOptions[0]?.textContent || '全員';
+    exportTarget.textContent = `${exportState.year}年${exportState.month}月 / ${staffLabel}`;
   }
 
-  [exportYear, exportMonth, exportStaff].forEach((el) => el.addEventListener('change', updateExportLink));
+  exportYearPrev.addEventListener('click', () => {
+    exportState.year -= 1;
+    if (isFutureMonth(exportState.year, exportState.month)) exportState.month = 12;
+    renderExportPicker();
+  });
+
+  exportYearNext.addEventListener('click', () => {
+    if (exportState.year >= new Date().getFullYear()) return;
+    exportState.year += 1;
+    if (isFutureMonth(exportState.year, exportState.month)) {
+      exportState.month = new Date().getMonth() + 1;
+    }
+    renderExportPicker();
+  });
+
+  exportStaff.addEventListener('change', updateExportLink);
+  exportWage.addEventListener('input', updateExportLink);
 
   checkSession();
 })();

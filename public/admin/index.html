@@ -39,17 +39,27 @@
       <button type="button" id="record-add-btn" class="btn btn-primary btn-small">打刻を追加</button>
     </div>
 
-    <div class="toolbar">
-      <label>CSV出力 年
-        <input type="number" id="export-year" min="2000" max="2100" style="width:5.5em" />
-      </label>
-      <label>月
-        <input type="number" id="export-month" min="1" max="12" style="width:4em" />
-      </label>
-      <label>スタッフ
-        <select id="export-staff"><option value="">全員</option></select>
-      </label>
-      <a id="export-link" class="btn btn-secondary btn-small" href="#">CSVダウンロード</a>
+    <div class="export-panel">
+      <div class="export-head">
+        <span class="export-title">月次データ出力</span>
+        <div class="year-nav">
+          <button type="button" id="year-prev" class="year-btn" aria-label="前の年">‹</button>
+          <span class="year-label" id="export-year-label">----年</span>
+          <button type="button" id="year-next" class="year-btn" aria-label="次の年">›</button>
+        </div>
+      </div>
+      <div class="month-grid" id="month-grid" role="group" aria-label="出力する月"></div>
+      <div class="export-actions">
+        <label>スタッフ
+          <select id="export-staff"><option value="">全員</option></select>
+        </label>
+        <label>時給
+          <input type="number" id="export-wage" min="0" step="10" value="1800" />円
+        </label>
+        <span class="export-target" id="export-target"></span>
+        <a id="export-xlsx-link" class="btn btn-primary btn-small" href="#">Excelダウンロード</a>
+        <a id="export-link" class="btn btn-secondary btn-small" href="#">CSVダウンロード</a>
+      </div>
     </div>
 
     <table class="data-table">
